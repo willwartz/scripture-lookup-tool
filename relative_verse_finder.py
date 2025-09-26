@@ -2,7 +2,11 @@ import argparse
 import re
 import urllib.request
 
+# Constants
+SCRIPTURE_URL = r'https://www.blueletterbible.org/study/parallel/paral18.cfm'
 
+
+# Data processing functions
 def scrape_scripture_data(url):
     """
     Scrape scripture relationship data from Blue Letter Bible website.
@@ -13,10 +17,12 @@ def scrape_scripture_data(url):
     Returns:
         str: Raw HTML content containing scripture relationships
     """
-    file = urllib.request.urlopen(url)
-    text = file.read().decode('utf-8')
-
-    return text.strip()
+    try:
+        file = urllib.request.urlopen(url)
+        text = file.read().decode('utf-8')
+        return text.strip()
+    except Exception as e:
+        raise Exception(f"Error fetching data: {e}")
 
 
 def parse_html_data(html_content):
@@ -90,6 +96,58 @@ def build_bidirectional_dict(psalm_chapters, related_chapters):
     return scripture_map
 
 
+# Utility functions
+def parse_once():
+    """Parse the scripture data once and return the structures"""
+    print("Scraping scriptures data...")
+    html_content = scrape_scripture_data(SCRIPTURE_URL)
+    print("Parsing HTML data...")
+    psalm_chapters, related_chapters = parse_html_data(html_content)
+    scripture_map = build_bidirectional_dict(psalm_chapters, related_chapters)
+    return psalm_chapters, related_chapters, scripture_map
+
+
+def scripture_format_validator(scripture):
+    """
+    Normalizes scripture reference format by standardizing capitalization and spacing.
+
+    Args:
+        scripture: Raw scripture reference string (e.g., '1 john 2', 'psa 23:1')
+
+    Returns:
+        str: Normalized scripture reference with:
+            - Proper title case
+            - No space between book number and name (e.g., '1John')
+            - Standardized Psalm format (removes verse numbers from Psalms)
+
+    Examples:
+        >>> scripture_format_validator('1 john 2')
+        '1John 2'
+        >>> scripture_format_validator('psa 23:1')
+        'Psa 23'
+    """
+    # Convert to title case and trim whitespace
+    scripture = scripture.title().strip()
+
+    # Join numeric prefix with book name (e.g., '1John' instead of '1 John')
+    pattern = r"^(\d+)\s+([A-Za-z])"
+    scripture = re.sub(pattern, r'\1\2', scripture)
+
+    # Ensure input has a chapter
+    pattern = r"([A-Za-z]+)\s+(\d+)"
+    match = re.match(pattern, scripture)
+    if not match:
+        raise ValueError(
+            f"Invalid format: {scripture}, Expected format: 'Book Chapter' or 'Book Chapter:Verse' (e.g., 'Psa 2' or 'Psa 2:1')")
+
+    # Remove verse numbers from Psalms (e.g., 'Psa 23' instead of 'Psa 23:1')
+    pattern = r'Psa\s*(\d+).*'
+    scripture = re.sub(pattern, r'Psa \1', scripture)
+
+    return scripture
+
+
+# Lookup functions
 def dict_lookup(reference, scripture_map):
     """
     Fast O(1) lookup using pre-built bidirectional dictionary. If exact match not found,
@@ -165,19 +223,7 @@ def filter_lookup(reference, psalm_chapters, related_chapters):
     return all_relations
 
 
-SCRIPTURE_URL = r'https://www.blueletterbible.org/study/parallel/paral18.cfm'
-
-
-def parse_once():
-    """Parse the scripture data once and return the structures"""
-    print("Scraping scriptures data...")
-    html_content = scrape_scripture_data(SCRIPTURE_URL)
-    print("Parsing HTML data...")
-    psalm_chapters, related_chapters = parse_html_data(html_content)
-    scripture_map = build_bidirectional_dict(psalm_chapters, related_chapters)
-    return psalm_chapters, related_chapters, scripture_map
-
-
+# Interactive functions
 def main():
     """Main function demonstrating both lookup methods"""
     # Configuration
@@ -206,23 +252,6 @@ def main():
             print("Methods returns different results")
 
 
-def scripture_format_validator(scripture):
-    # check if scripture is in scripture_map
-
-    # Auto-capitalize
-    scripture = scripture.title().strip()
-
-    # Remove space between book number and book name
-    pattern = r"^(\d+)\s+([A-Za-z])"
-    scripture = re.sub(pattern, r'\1\2', scripture)
-
-    # don't mind the ":" but first check with it
-    pattern = r'Psa\s*(\d+).*'
-    scripture = re.sub(pattern, r'Psa \1', scripture)
-
-    return scripture
-
-
 def cli_interface():
     """
     Simple CLI interface for scripture lookups.
@@ -240,7 +269,12 @@ def cli_interface():
     args = parser.parse_args()
 
     print("Loading data...")
-    psalm_chapters, related_chapters, scripture_map = parse_once()
+    # Parse scripture data
+    try:
+        psalm_chapters, related_chapters, scripture_map = parse_once()
+    except Exception as e:
+        print(e)
+        return
 
     print(f"\nParsed {len(psalm_chapters)} scripture groups")
     print(f"Dictionary contains {len(scripture_map)} unique scripture references")
@@ -254,8 +288,14 @@ def cli_interface():
             if ref.lower() == 'quit':
                 break
             if ref:
-                valid_ref = scripture_format_validator(ref)
-                print(f"\n=== Looking up: {ref} ===")
+                # Validate scripture format
+                try:
+                    valid_ref = scripture_format_validator(ref)
+                except ValueError as e:
+                    print(f"Error: {e}")
+                    continue
+
+                print(f"\n=== Looking up: {valid_ref} ===")
 
                 # Dictionary lookup only
                 result = dict_lookup(valid_ref, scripture_map)
@@ -266,7 +306,12 @@ def cli_interface():
             parser.error("Scripture reference required when not using --interactive mode")
             return
 
-        valid_ref = scripture_format_validator(args.scripture)
+        # Validate scripture format
+        try:
+            valid_ref = scripture_format_validator(args.scripture)
+        except ValueError as e:
+            print(f"Error: {e}")
+            return
 
         print(f"\n=== Looking up: {valid_ref} ===")
 
@@ -279,6 +324,7 @@ def cli_interface():
             print(f"Filtered lookup result ({len(result)}) found: {result}")
 
 
+# Entry point
 if __name__ == '__main__':
     # Choose which one to run
     import sys
