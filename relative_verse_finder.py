@@ -237,5 +237,5 @@ def cli_interface():
 
 
 if __name__ == '__main__':
-    # main()
+    main()
     cli_interface()
