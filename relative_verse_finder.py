@@ -145,20 +145,24 @@ def filter_lookup(reference, psalm_chapters, related_chapters):
     return all_relations
 
 
+SCRIPTURE_URL = r'https://www.blueletterbible.org/study/parallel/paral18.cfm'
+
+
+def parse_once():
+    """Parse the scripture data once and return the structures"""
+    print("Scraping scriptures data...")
+    html_content = scrape_scripture_data(SCRIPTURE_URL)
+    print("Parsing HTML data...")
+    psalm_chapters, related_chapters = parse_html_data(html_content)
+    final_dict = build_bidirectional_dict(psalm_chapters, related_chapters)
+    return psalm_chapters, related_chapters, final_dict
+
+
 def main():
     """Main function demonstrating both lookup methods"""
     # Configuration
-    url = r'https://www.blueletterbible.org/study/parallel/paral18.cfm'
+    psalm_chapters, related_chapters, scripture_map = parse_once()
     test_scriptures = ['Psa 2', 'Dan 7:28', 'Rev 19:15']
-
-    print("Scraping scriptures data...")
-    html_content = scrape_scripture_data(url)
-
-    print("Parsing scripture references...")
-    psalm_chapters, related_chapters = parse_html_data(html_content)
-
-    print("Building bidirectional dictionary...")
-    scripture_map = build_bidirectional_dict(psalm_chapters, related_chapters)
 
     print(f"\nParsed {len(psalm_chapters)} scripture groups")
     print(f"Dictionary contains {len(scripture_map)} unique scripture references")
@@ -199,10 +203,7 @@ def cli_interface():
     args = parser.parse_args()
 
     print("Loading data...")
-    url = r'https://www.blueletterbible.org/study/parallel/paral18.cfm'
-    html_content = scrape_scripture_data(url)
-    psalm_chapters, related_chapters = parse_html_data(html_content)
-    final_dict = build_bidirectional_dict(psalm_chapters, related_chapters)
+    psalm_chapters, related_chapters, final_dict = parse_once()
 
     print(f"\nParsed {len(psalm_chapters)} scripture groups")
     print(f"Dictionary contains {len(final_dict)} unique scripture references")
@@ -237,5 +238,10 @@ def cli_interface():
 
 
 if __name__ == '__main__':
-    main()
-    cli_interface()
+    # Choose which one to run
+    import sys
+
+    if len(sys.argv) > 1:
+        cli_interface()  # If args provided, run CLI
+    else:
+        main()

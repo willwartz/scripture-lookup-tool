@@ -15,11 +15,16 @@ page.
 ## Installation
 
 ```bash
-git clone https://github.com/yourusername/scripture-lookup-tool.git
+git clone https://github.com/willwartz/scripture-lookup-tool.git
 cd scripture-lookup-tool
 ```
 
 No additional dependencies required - uses only Python standard library.
+
+## Requirements
+
+- Python 3.7 or higher
+- Internet connection (to fetch data from Blue Letter Bible)
 
 ## Usage
 
@@ -80,6 +85,7 @@ Dict lookup result (3) found: ['Dan 7:28', 'Rev 19:15', 'Rev 12:5']
 - `filter_lookup()`: Structure-preserving O(n) lookup
 - `cli_interface()`: Command line interface
 - `main()`: Demonstration function with test cases
+- `parse_once()`: Loads, parses, and builds lookup structures in one step
 
 ## Test Cases
 
@@ -98,13 +104,17 @@ The tool includes test cases for common scripture references:
 - [ ] Local caching to avoid repeated web requests
 - [ ] Support for additional scripture relationship sources
 
-## Contributing
+## Notes & Limitations
 
-Feel free to submit issues, fork the repository, and create pull requests for any improvements.
+- Results may include duplicate scripture references to reflect all groupings from the source data.
+- The tool uses regular expressions for HTML parsing. If the Blue Letter Bible page structure changes, parsing may fail.
+- Output lists are not sorted and may contain repeated verses.
+- Basic error handling is included for missing scripture references and network issues.
+- To extend or customize the tool (e.g., add more sources), modify the `scrape_scripture_data` and `parse_html_data` functions.
 
 ## License
 
-This project is open source. Please respect the terms of service of Blue Letter Bible when using their data.
+MIT License
 
 ## Disclaimer
 
