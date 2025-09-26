@@ -83,8 +83,9 @@ Dict lookup result (3) found: ['Jer 39:10', '2Ch 20']
 - `build_bidirectional_dict()`: Creates fast lookup dictionary
 - `dict_lookup()`: Fast O(1) scripture lookup
 - `filter_lookup()`: Structure-preserving O(n) lookup
+- `scripture_format_validator()`: Normalizes and validates scripture input
 - `cli_interface()`: Command line interface
-- `main()`: Demonstration function with test cases
+- `main()`: Demonstration and test harness for both lookup methods
 - `parse_once()`: Loads, parses, and builds lookup structures in one step
 
 ## Test Cases
@@ -97,9 +98,9 @@ The tool includes test cases for common scripture references:
 
 ## Future Enhancements
 
-- [ ] Input validation for proper scripture format
-- [ ] Case-insensitive scripture matching
-- [ ] Strip verse numbers (keep only book and chapter)
+- [x] Input validation for proper scripture format
+- [x] Case-insensitive scripture matching
+- [x] Strip verse numbers (keep only book and chapter)
 - [ ] More robust input cleaning and error handling
 - [ ] Local caching to avoid repeated web requests
 - [ ] Support for additional scripture relationship sources
