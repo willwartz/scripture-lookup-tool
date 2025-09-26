@@ -62,8 +62,8 @@ Building bidirectional dictionary...
 Parsed 156 scripture groups
 Dictionary contains 312 unique scripture references
 
-=== Looking up: Psa 2 ===
-Dict lookup result (3) found: ['Dan 7:28', 'Rev 19:15', 'Rev 12:5']
+=== Looking up: Psa 83 ===
+Dict lookup result (3) found: ['Jer 39:10', '2Ch 20']
 ```
 
 ## How It Works
@@ -110,7 +110,8 @@ The tool includes test cases for common scripture references:
 - The tool uses regular expressions for HTML parsing. If the Blue Letter Bible page structure changes, parsing may fail.
 - Output lists are not sorted and may contain repeated verses.
 - Basic error handling is included for missing scripture references and network issues.
-- To extend or customize the tool (e.g., add more sources), modify the `scrape_scripture_data` and `parse_html_data` functions.
+- To extend or customize the tool (e.g., add more sources), modify the `scrape_scripture_data` and `parse_html_data`
+  functions.
 
 ## License
 
