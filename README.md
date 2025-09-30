@@ -1,7 +1,7 @@
 # Scripture Relationship Lookup Tool
 
-A Python tool for finding related scripture references by scraping data from Blue Letter Bible's parallel scripture
-page.
+A Python tool for finding scripture references related to Psalms by scraping data from Blue Letter Bible's 'Probable
+Occasion When Each Psalm Was Composed' page
 
 ## Features
 
@@ -81,12 +81,13 @@ Dict lookup result (3) found: ['Jer 39:10', '2Ch 20']
 - `scrape_scripture_data()`: Downloads HTML content from Blue Letter Bible
 - `parse_html_data()`: Extracts scripture references using regex
 - `build_bidirectional_dict()`: Creates fast lookup dictionary
+- `load_or_parse_data()`: Loads scripture data from cache or parses from website if cache not found
 - `parse_once()`: Loads, parses, and builds lookup structures in one step
-- `scripture_format_validator()`: Normalizes and validates scripture input
+- `scripture_format_validator()`: Normalizes and validates scripture input (raises ValueError on invalid input)
 - `dict_lookup()`: Fast O(1) scripture lookup
 - `filter_lookup()`: Structure-preserving O(n) lookup
 - `main()`: Demonstration and test harness for both lookup methods
-- `cli_interface()`: Command line interface
+- `cli_interface()`: Command line interface (interactive mode always uses dict method)
 
 ## Test Cases
 
@@ -102,7 +103,7 @@ The tool includes test cases for common scripture references:
 - [x] Case-insensitive scripture matching
 - [x] Strip verse numbers (keep only book and chapter)
 - [x] More robust input cleaning and error handling
-- [ ] Local caching to avoid repeated web requests
+- [x] Local caching to avoid repeated web requests
 - [ ] Support for additional scripture relationship sources
 
 ## Notes & Limitations
@@ -122,3 +123,7 @@ MIT License
 
 This tool scrapes publicly available data from Blue Letter Bible. Please use responsibly and in accordance with their
 terms of service.
+
+- Book abbreviations like "Sam" for "Samuel" are handled (e.g., "1 Sam 2" → "1Sa 2"). The tool is designed for users
+  familiar with standard Bible book abbreviations (e.g., "1 Sam" or "1Samuel"). Uncommon forms like "First Samuel" or "
+  1st Samuel" are not supported.
