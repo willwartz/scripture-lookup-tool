@@ -1,8 +1,14 @@
 import argparse
+import os
+import pickle
 import re
 import urllib.request
 
+# Constants
+SCRIPTURE_URL = r'https://www.blueletterbible.org/study/parallel/paral18.cfm'
 
+
+# Data processing functions
 def scrape_scripture_data(url):
     """
     Scrape scripture relationship data from Blue Letter Bible website.
@@ -13,10 +19,12 @@ def scrape_scripture_data(url):
     Returns:
         str: Raw HTML content containing scripture relationships
     """
-    file = urllib.request.urlopen(url)
-    text = file.read().decode('utf-8')
-
-    return text.strip()
+    try:
+        file = urllib.request.urlopen(url)
+        text = file.read().decode('utf-8')
+        return text.strip()
+    except Exception as e:
+        raise Exception(f"Error fetching data: {e}")
 
 
 def parse_html_data(html_content):
@@ -90,20 +98,122 @@ def build_bidirectional_dict(psalm_chapters, related_chapters):
     return scripture_map
 
 
-def dict_lookup(reference, final_dict):
+# Utility functions
+def load_or_parse_data():
+    """Load scripture data from cache or parse from website if cache not found"""
+    # Define cache file path
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    cache_file = os.path.join(script_dir, 'scripture_cache.pkl')
+
+    # If scripture_cache file exists, load from it
+    if os.path.exists(cache_file):
+        print("Loading data from cache...")
+        with open(cache_file, 'rb') as f:
+            psalm_chapters, related_chapters, scripture_map = pickle.load(f)
+    else:
+        print("Cache file not found, parsing data...")
+        psalm_chapters, related_chapters, scripture_map = parse_once()
+        with open(cache_file, 'wb') as f:
+            pickle.dump((psalm_chapters, related_chapters, scripture_map), f)
+
+    return psalm_chapters, related_chapters, scripture_map
+
+
+def parse_once():
+    """Parse the scripture data once and return the structures"""
+    print("Scraping scriptures data...")
+    html_content = scrape_scripture_data(SCRIPTURE_URL)
+    print("Parsing HTML data...")
+    psalm_chapters, related_chapters = parse_html_data(html_content)
+    scripture_map = build_bidirectional_dict(psalm_chapters, related_chapters)
+    return psalm_chapters, related_chapters, scripture_map
+
+
+# pattern = r'([A-Za-z]+)'
+# input = related_chapters
+def scripture_format_validator(scripture):
     """
-    Fast O(1) lookup using pre-built bidirectional dictionary.
+    Normalizes scripture reference format by standardizing capitalization and spacing.
+
+    Args:
+        scripture: Raw scripture reference string (e.g., '1 john 2', 'psa 23:1')
+
+    Returns:
+        str: Normalized scripture reference with:
+            - Proper title case
+            - No space between book number and name (e.g., '1John')
+            - Standardized Psalm format (removes verse numbers from Psalms)
+
+    Examples:
+        >>> scripture_format_validator('1 john 2')
+        '1John 2'
+        >>> scripture_format_validator('psa 23:1')
+        'Psa 23'
+    """
+    # Convert to title case and trim whitespace
+    scripture = scripture.title().strip()
+
+    # Join numeric prefix with book name (e.g., '1John' instead of '1 John')
+    pattern = r"^(\d+)\s+([A-Za-z])"
+    scripture = re.sub(pattern, r'\1\2', scripture)
+
+    # Truncate book names to first 3 characters (e.g., 'Psa' for 'Psalms', '1Sa' for '1Samuel')
+    pattern = r'(^[A-Za-z0-9]+)'
+    scripture = re.sub(pattern, lambda m: m.group(1)[:3], scripture)
+
+    # Remove extra spaces between book and chapter
+    scripture = re.sub(r'\s+', ' ', scripture)
+    scripture = re.sub(r'\s*:\s*', ':', scripture)  # Remove spaces around colon
+
+    # Ensure input has a chapter
+    pattern = r"([A-Za-z0-9]+)\s+(\d+)"
+    match = re.match(pattern, scripture)
+    if not match:
+        raise ValueError(
+            f"Invalid format: {scripture}, Expected format: 'Book Chapter' or 'Book Chapter:Verse' (e.g., 'Psa 2' or '1Sa 2:1')")
+
+    # Remove verse numbers from Psalms (e.g., 'Psa 23' instead of 'Psa 23:1')
+    pattern = r'Psa\s*(\d+).*'
+    scripture = re.sub(pattern, r'Psa \1', scripture)
+
+    return scripture
+
+
+# Lookup functions
+def dict_lookup(reference, scripture_map):
+    """
+    Fast O(1) lookup using pre-built bidirectional dictionary. If exact match is not found,
+     attempt chapter-level match by removing verse numbers.
 
     Args:
         reference: Scripture reference to search for (e.g., 'Psa 2', 'Dan 7:28')
-        final_dict: Pre-built bidirectional dictionary from build_bidirectional_dict()
+        scripture_map: Pre-built bidirectional dictionary from build_bidirectional_dict()
 
     Returns:
-        list: Related scripture references, or empty list if not found
+        list: For exact match - list of related scriptures
+             For chapter match - list of all related scriptures for all matching chapter references
+             Empty list if no match found
 
-    Note: Fastest lookup method but uses flattened data structure.
+    Example:
+        >>> dict_lookup('Psa 2:4', scripture_map)  # No exact match
+        "Showing results for Psa 2"
+        ['1Ch 14:2', 'Neh 13:2']  # Returns all references related to Psa 2
     """
-    return final_dict.get(reference, [])
+    # Try exact match first for O(1) lookup
+    if reference in scripture_map:
+        return scripture_map[reference]
+
+    # Try chapter-level match by removing verse number
+    base_reference = reference.split(":")[0] if ":" in reference else reference
+    print(f"Showing results for {base_reference}")
+
+    # Get all references that match at chapter level
+    matches = [scripture_map[key] for key in scripture_map.keys() if key.split(":")[0] == base_reference]
+
+    if matches:
+        return matches
+
+    return []
 
 
 def filter_lookup(reference, psalm_chapters, related_chapters):
@@ -122,9 +232,18 @@ def filter_lookup(reference, psalm_chapters, related_chapters):
     Each index represents corresponding pairs from scraped table data.
     Slower O(n) lookup but maintains data integrity and original relationships.
     """
-    # Find all groups containing the search text
+    # Find all groups containing the search text using exact match
     psalm_matches = list(filter(lambda index_psa: reference in index_psa[1], psalm_chapters.items()))
     related_matches = list(filter(lambda index_rel: reference in index_rel[1], related_chapters.items()))
+
+    # If no exact matches, try chapter-level match by removing verse number
+    if not psalm_matches and not related_matches:
+        base_reference = reference.split(":")[0] if ":" in reference else reference
+        print(f"Showing results for {base_reference}")
+        psalm_matches = list(filter(lambda index_psa: base_reference in [psa.split(":")[0] for psa in index_psa[1]],
+                                    psalm_chapters.items()))
+        related_matches = list(filter(lambda index_rel: base_reference in [rel.split(":")[0] for rel in index_rel[1]],
+                                      related_chapters.items()))
 
     all_relations = []  # Reset for each search
 
@@ -145,23 +264,11 @@ def filter_lookup(reference, psalm_chapters, related_chapters):
     return all_relations
 
 
-SCRIPTURE_URL = r'https://www.blueletterbible.org/study/parallel/paral18.cfm'
-
-
-def parse_once():
-    """Parse the scripture data once and return the structures"""
-    print("Scraping scriptures data...")
-    html_content = scrape_scripture_data(SCRIPTURE_URL)
-    print("Parsing HTML data...")
-    psalm_chapters, related_chapters = parse_html_data(html_content)
-    final_dict = build_bidirectional_dict(psalm_chapters, related_chapters)
-    return psalm_chapters, related_chapters, final_dict
-
-
+# Interactive functions
 def main():
     """Main function demonstrating both lookup methods"""
     # Configuration
-    psalm_chapters, related_chapters, scripture_map = parse_once()
+    psalm_chapters, related_chapters, scripture_map = load_or_parse_data()
     test_scriptures = ['Psa 2', 'Dan 7:28', 'Rev 19:15']
 
     print(f"\nParsed {len(psalm_chapters)} scripture groups")
@@ -192,34 +299,47 @@ def cli_interface():
 
     Usage:
         python script.py --interactive    # Interactive mode
-        python script.py "Psa 2"         # One lookup and exit
+        python script.py "Psa 2"    # One lookup and exit
     """
     parser = argparse.ArgumentParser(description='Psalm Scripture Lookup CLI')
     parser.add_argument('--interactive', '-i', action='store_true', help='Activate interactive mode.')
     parser.add_argument('--method', '-m', choices=["dict", "filter"], default="dict",
                         help="Lookup method: dict or filter")
-    parser.add_argument('scripture', metavar='scripture', nargs='?', help='Scripture to look up.')
+    parser.add_argument('scripture', metavar='scripture', nargs='?', help='Scripture to look up. e.g "Psa 2"')
 
     args = parser.parse_args()
 
     print("Loading data...")
-    psalm_chapters, related_chapters, final_dict = parse_once()
+    # Parse scripture data
+    try:
+        psalm_chapters, related_chapters, scripture_map = load_or_parse_data()
+    except Exception as e:
+        print(e)
+        return
 
     print(f"\nParsed {len(psalm_chapters)} scripture groups")
-    print(f"Dictionary contains {len(final_dict)} unique scripture references")
+    print(f"Dictionary contains {len(scripture_map)} unique scripture references")
 
     if args.interactive:
         # Interactive mode - always uses dict method
         print("\nInteractive mode (dict method). Type 'quit' to exit.")
         while True:
+            # Get scripture from user and validate format
             ref = input("\nEnter scripture: ").strip()
             if ref.lower() == 'quit':
                 break
             if ref:
-                print(f"\n=== Looking up: {ref} ===")
+                # Validate scripture format
+                try:
+                    valid_ref = scripture_format_validator(ref)
+                except ValueError as e:
+                    print(f"Error: {e}")
+                    continue
+
+                print(f"\n=== Looking up: {valid_ref} ===")
 
                 # Dictionary lookup only
-                result = dict_lookup(ref, final_dict)
+                result = dict_lookup(valid_ref, scripture_map)
                 print(f"Dict lookup result ({len(result)}) found: {result}")
     else:
         # Single lookup with chosen method
@@ -227,16 +347,25 @@ def cli_interface():
             parser.error("Scripture reference required when not using --interactive mode")
             return
 
-        print(f"\n=== Looking up: {args.scripture} ===")
+        # Validate scripture format
+        try:
+            valid_ref = scripture_format_validator(args.scripture)
+        except ValueError as e:
+            print(f"Error: {e}")
+            return
 
+        print(f"\n=== Looking up: {valid_ref} ===")
+
+        # Validate scripture format
         if args.method == 'dict':
-            result = dict_lookup(args.scripture, final_dict)
+            result = dict_lookup(valid_ref, scripture_map)
             print(f"Dict lookup result ({len(result)}) found: {result}")
         else:  # filter
-            result = filter_lookup(args.scripture, psalm_chapters, related_chapters)
+            result = filter_lookup(valid_ref, psalm_chapters, related_chapters)
             print(f"Filtered lookup result ({len(result)}) found: {result}")
 
 
+# Entry point
 if __name__ == '__main__':
     # Choose which one to run
     import sys
