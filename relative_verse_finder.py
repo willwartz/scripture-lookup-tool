@@ -1,4 +1,6 @@
 import argparse
+import os
+import pickle
 import re
 import urllib.request
 
@@ -97,6 +99,26 @@ def build_bidirectional_dict(psalm_chapters, related_chapters):
 
 
 # Utility functions
+def load_or_parse_data():
+    """Load scripture data from cache or parse from website if cache not found"""
+    # Define cache file path
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    cache_file = os.path.join(script_dir, 'scripture_cache.pkl')
+
+    # If scripture_cache file exists, load from it
+    if os.path.exists(cache_file):
+        print("Loading data from cache...")
+        with open(cache_file, 'rb') as f:
+            psalm_chapters, related_chapters, scripture_map = pickle.load(f)
+    else:
+        print("Cache file not found, parsing data...")
+        psalm_chapters, related_chapters, scripture_map = parse_once()
+        with open(cache_file, 'wb') as f:
+            pickle.dump((psalm_chapters, related_chapters, scripture_map), f)
+
+    return psalm_chapters, related_chapters, scripture_map
+
+
 def parse_once():
     """Parse the scripture data once and return the structures"""
     print("Scraping scriptures data...")
@@ -107,6 +129,8 @@ def parse_once():
     return psalm_chapters, related_chapters, scripture_map
 
 
+# pattern = r'([A-Za-z]+)'
+# input = related_chapters
 def scripture_format_validator(scripture):
     """
     Normalizes scripture reference format by standardizing capitalization and spacing.
@@ -133,12 +157,20 @@ def scripture_format_validator(scripture):
     pattern = r"^(\d+)\s+([A-Za-z])"
     scripture = re.sub(pattern, r'\1\2', scripture)
 
+    # Truncate book names to first 3 characters (e.g., 'Psa' for 'Psalms', '1Sa' for '1Samuel')
+    pattern = r'(^[A-Za-z0-9]+)'
+    scripture = re.sub(pattern, lambda m: m.group(1)[:3], scripture)
+
+    # Remove extra spaces between book and chapter
+    scripture = re.sub(r'\s+', ' ', scripture)
+    scripture = re.sub(r'\s*:\s*', ':', scripture)  # Remove spaces around colon
+
     # Ensure input has a chapter
-    pattern = r"([A-Za-z]+)\s+(\d+)"
+    pattern = r"([A-Za-z0-9]+)\s+(\d+)"
     match = re.match(pattern, scripture)
     if not match:
         raise ValueError(
-            f"Invalid format: {scripture}, Expected format: 'Book Chapter' or 'Book Chapter:Verse' (e.g., 'Psa 2' or 'Psa 2:1')")
+            f"Invalid format: {scripture}, Expected format: 'Book Chapter' or 'Book Chapter:Verse' (e.g., 'Psa 2' or '1Sa 2:1')")
 
     # Remove verse numbers from Psalms (e.g., 'Psa 23' instead of 'Psa 23:1')
     pattern = r'Psa\s*(\d+).*'
@@ -150,8 +182,8 @@ def scripture_format_validator(scripture):
 # Lookup functions
 def dict_lookup(reference, scripture_map):
     """
-    Fast O(1) lookup using pre-built bidirectional dictionary. If exact match not found,
-    attempts chapter-level match by removing verse numbers.
+    Fast O(1) lookup using pre-built bidirectional dictionary. If exact match is not found,
+     attempt chapter-level match by removing verse numbers.
 
     Args:
         reference: Scripture reference to search for (e.g., 'Psa 2', 'Dan 7:28')
@@ -159,13 +191,13 @@ def dict_lookup(reference, scripture_map):
 
     Returns:
         list: For exact match - list of related scriptures
-             For chapter match - list of all references for that chapter
+             For chapter match - list of all related scriptures for all matching chapter references
              Empty list if no match found
 
     Example:
         >>> dict_lookup('Psa 2:4', scripture_map)  # No exact match
         "Showing results for Psa 2"
-        ['Psa 2', 'Psa 2:1-3']  # Returns all Psa 2 references
+        ['1Ch 14:2', 'Neh 13:2']  # Returns all references related to Psa 2
     """
     # Try exact match first for O(1) lookup
     if reference in scripture_map:
@@ -176,7 +208,7 @@ def dict_lookup(reference, scripture_map):
     print(f"Showing results for {base_reference}")
 
     # Get all references that match at chapter level
-    matches = [key for key in scripture_map.keys() if key.split(":")[0] == base_reference]
+    matches = [scripture_map[key] for key in scripture_map.keys() if key.split(":")[0] == base_reference]
 
     if matches:
         return matches
@@ -200,9 +232,18 @@ def filter_lookup(reference, psalm_chapters, related_chapters):
     Each index represents corresponding pairs from scraped table data.
     Slower O(n) lookup but maintains data integrity and original relationships.
     """
-    # Find all groups containing the search text
+    # Find all groups containing the search text using exact match
     psalm_matches = list(filter(lambda index_psa: reference in index_psa[1], psalm_chapters.items()))
     related_matches = list(filter(lambda index_rel: reference in index_rel[1], related_chapters.items()))
+
+    # If no exact matches, try chapter-level match by removing verse number
+    if not psalm_matches and not related_matches:
+        base_reference = reference.split(":")[0] if ":" in reference else reference
+        print(f"Showing results for {base_reference}")
+        psalm_matches = list(filter(lambda index_psa: base_reference in [psa.split(":")[0] for psa in index_psa[1]],
+                                    psalm_chapters.items()))
+        related_matches = list(filter(lambda index_rel: base_reference in [rel.split(":")[0] for rel in index_rel[1]],
+                                      related_chapters.items()))
 
     all_relations = []  # Reset for each search
 
@@ -227,7 +268,7 @@ def filter_lookup(reference, psalm_chapters, related_chapters):
 def main():
     """Main function demonstrating both lookup methods"""
     # Configuration
-    psalm_chapters, related_chapters, scripture_map = parse_once()
+    psalm_chapters, related_chapters, scripture_map = load_or_parse_data()
     test_scriptures = ['Psa 2', 'Dan 7:28', 'Rev 19:15']
 
     print(f"\nParsed {len(psalm_chapters)} scripture groups")
@@ -271,7 +312,7 @@ def cli_interface():
     print("Loading data...")
     # Parse scripture data
     try:
-        psalm_chapters, related_chapters, scripture_map = parse_once()
+        psalm_chapters, related_chapters, scripture_map = load_or_parse_data()
     except Exception as e:
         print(e)
         return
